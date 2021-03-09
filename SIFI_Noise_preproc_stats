@@ -1,0 +1,936 @@
+### SIFI Noise Process data
+
+# Script by Julian Keil & Merle Schuckart
+
+# Steps:
+# 1. Load data
+# 2. Exclude based on demographics
+# 3. Exclude based on checks
+# 4. Exclude based on control trials
+# 5. Extract trial averages for responses and RTs
+# 6. Stats -> repeated-measures ANOVAs with post-hoc tests
+# 7. Plots -> Raincloud plots
+
+##---- 1. Get Data ----
+# 1.1 Set Working Directors
+#setwd('/Users/juliankeil/Documents/Arbeit/Kiel/Abschlussarbeiten/Fertig/Zimmermann/SIFINoise_Git/01_Data/01_ProcessedData/')
+setwd("/Users/merle/Desktop/Arbeit/HiWi/Experimente/Ida Zimmermann")
+load('VP_data.rda')
+
+##---- 2. Exclude based on demographics ----
+dem_sel <- c("id_drugs","id_eyesight","id_hearing","id_neuro")
+dem_catch <- which(VP_demographics[dem_sel,] == "yes", arr.ind = TRUE)
+
+VP_data[dem_catch[2]] <- NULL
+
+##---- 3. Exclude based on checks ----
+# 'No'-Responses
+exp_sel <- c("exp_noise", "exp_visual", "exp_auditory")
+exp_catch <- which(VP_checks[exp_sel,] == "no", arr.ind = TRUE)
+
+VP_data[exp_catch[2]] <- NULL
+
+# 'always'-Responses
+exp_sel <- c("exp_delayfrequency")
+exp_catch <- which(VP_checks[exp_sel,] == "always", arr.ind = TRUE)
+
+VP_data[exp_catch] <- NULL
+
+# 'zero'-Responses
+exp_sel <- c("exp_noiseBlocks", "exp_noiseWithinblock")
+exp_catch <- which(VP_checks[exp_sel,] == "zero", arr.ind = TRUE)
+
+VP_data[exp_catch[2]] <- NULL
+
+##---- 4. Exclusion based on performance ----
+# First remove non-responders -> missed more than 1/3 of trials
+excl_vec_nr <- NULL
+nr <- NULL
+for (i in 1:length(VP_data)) {
+  nr[i] <- 0
+  nr[i] <- sum(VP_data[i][[1]][[1]]$Response_noiselevel == "")
+  if ( nr[i] > length(VP_data[i][[1]][[1]]$Response_noiselevel)/3) {
+    excl_vec_nr <- c(excl_vec_nr,i)
+  } # If loop
+  
+} # For loop
+
+VP_data[excl_vec_nr] <- NULL
+
+# Then remove bad trials
+# No response
+# Response too early (<100ms)
+# Response too late (>1700ms)
+for(i in 1:length(VP_data)) {
+  
+  # No response
+  VP_data[i][[1]][[1]] <- VP_data[i][[1]][[1]][VP_data[i][[1]][[1]]$Response_noiselevel != "",]
+  # Fast response
+  VP_data[i][[1]][[1]] <- VP_data[i][[1]][[1]][VP_data[i][[1]][[1]]$Value_noiselevel >= 100,]
+  # Slow response
+  VP_data[i][[1]][[1]] <- VP_data[i][[1]][[1]][VP_data[i][[1]][[1]]$Value_noiselevel <= 1700,]
+  
+} # for loop
+
+# 4.1 Exclude based on poor performance in control blocks -> more than 1/3 errors
+excl_vec_cb <- NULL
+comp <- NULL
+for(i in 1:length(VP_data)) {
+  
+  blocks <- which(VP_data[i][[1]][[1]]$Block_noiselevel == 'Kontrollblock loop +noise+')
+  stim <- as.numeric(substring(VP_data[i][[1]][[1]]$Label_noiselevel[blocks],2,2))
+  resp <- as.numeric(as.character.factor(VP_data[i][[1]][[1]]$Response_noiselevel[blocks]))
+  comp[i] <- sum(stim != resp)
+  
+  if (comp[i]/(length(stim)) > 0.34) {
+    excl_vec_cb <- c(excl_vec_cb,i)
+  } # if loop
+  
+} # for loop
+
+VP_data[excl_vec_cb] <- NULL
+
+# 4.2 Exclude based on poor performance in A0V2 -> more than 1/10 errors
+excl_vec_a0v2 <- NULL
+comp <- NULL
+for(i in 1:length(VP_data)) {
+  
+  blocks <- which(VP_data[i][[1]][[1]]$Block_noiselevel != 'Kontrollblock loop +noise+')
+  trials <- which(VP_data[i][[1]][[1]]$Label_noiselevel[blocks] == "A0V2")
+  stim <- as.numeric(substring(VP_data[i][[1]][[1]]$Label_noiselevel[blocks][trials],4,4))
+  resp <- as.numeric(as.character.factor(VP_data[i][[1]][[1]]$Response_noiselevel[blocks][trials]))
+  comp[i] <- sum(stim != resp)
+  
+  if (comp[i]/(length(stim)) > 0.10) {
+    excl_vec_a0v2 <- c(excl_vec_a0v2,i)
+  } # if loop
+  
+} # for loop
+
+VP_data[excl_vec_a0v2] <- NULL
+
+##---- 5. Compute Response Rates & Median Reaction Times ----
+# build containers
+all_r0 <- NULL
+all_r1 <- NULL
+all_r2 <- NULL
+
+all_rt0 <- NULL
+all_rt1 <- NULL
+all_rt2 <- NULL
+
+all_rts <- NULL 
+
+# Loop the data
+for(i in 1:length(VP_data)) {
+  # collect the data
+  tmpdat <- droplevels(VP_data[i][[1]][[1]],"")
+  
+  # build empty matrices
+  r0 <- matrix( , nrow=length(levels(tmpdat$Block_noiselevel)), ncol=length(levels(tmpdat$Label_noiselevel)))
+  r1 <- matrix( , nrow=length(levels(tmpdat$Block_noiselevel)), ncol=length(levels(tmpdat$Label_noiselevel)))
+  r2 <- matrix( , nrow=length(levels(tmpdat$Block_noiselevel)), ncol=length(levels(tmpdat$Label_noiselevel)))
+  
+  rt0 <- matrix( , nrow=length(levels(tmpdat$Block_noiselevel)), ncol=length(levels(tmpdat$Label_noiselevel)))
+  rt1 <- matrix( , nrow=length(levels(tmpdat$Block_noiselevel)), ncol=length(levels(tmpdat$Label_noiselevel)))
+  rt2 <- matrix( , nrow=length(levels(tmpdat$Block_noiselevel)), ncol=length(levels(tmpdat$Label_noiselevel)))
+  
+  rt <- matrix( , nrow=length(levels(tmpdat$Block_noiselevel)), ncol=length(levels(tmpdat$Label_noiselevel)))
+  
+  # loop conditions and responses
+  b <- 1 # start at 1
+  for(bl in levels(tmpdat$Block_noiselevel)) {
+    c <- 1 # start at 1
+    for(cond in levels(tmpdat$Label_noiselevel)) {
+      # collect the response rate
+      allresp <- sum(tmpdat$Block_noiselevel == bl & tmpdat$Label_noiselevel == cond)
+      r0[b,c] <- sum(tmpdat$Block_noiselevel == bl & tmpdat$Label_noiselevel == cond & tmpdat$Response_noiselevel == 0) /allresp
+      r1[b,c] <- sum(tmpdat$Block_noiselevel == bl & tmpdat$Label_noiselevel == cond & tmpdat$Response_noiselevel == 1) /allresp
+      r2[b,c] <- sum(tmpdat$Block_noiselevel == bl & tmpdat$Label_noiselevel == cond & tmpdat$Response_noiselevel == 2) /allresp
+      # collect the median response times (might be NA, e.g. if cond was A2V2 and there was no response = 0)
+      rt0[b,c] <- median(tmpdat$Value_noiselevel[tmpdat$Block_noiselevel == bl & tmpdat$Label_noiselevel == cond & tmpdat$Response_noiselevel == 0])
+      rt1[b,c] <- median(tmpdat$Value_noiselevel[tmpdat$Block_noiselevel == bl & tmpdat$Label_noiselevel == cond & tmpdat$Response_noiselevel == 1])
+      rt2[b,c] <- median(tmpdat$Value_noiselevel[tmpdat$Block_noiselevel == bl & tmpdat$Label_noiselevel == cond & tmpdat$Response_noiselevel == 2])
+      
+      # get median response times, but this time aggregated over all responses 
+      rt[b,c] <- median(tmpdat$Value_noiselevel[tmpdat$Block_noiselevel == bl & tmpdat$Label_noiselevel == cond])
+      
+      c <- c+1
+    } 
+    b <- b+1
+  }
+  # Name the colums
+  colnames(r0) <- levels(tmpdat$Label_noiselevel)
+  colnames(r1) <- levels(tmpdat$Label_noiselevel)
+  colnames(r2) <- levels(tmpdat$Label_noiselevel)
+  
+  colnames(rt0) <- levels(tmpdat$Label_noiselevel)
+  colnames(rt1) <- levels(tmpdat$Label_noiselevel)
+  colnames(rt2) <- levels(tmpdat$Label_noiselevel)
+  
+  colnames(rt) <- levels(tmpdat$Label_noiselevel)
+  
+  # Build data frames
+  r0d <- as.data.frame(r0)
+  r0d$Block <- as.factor(levels(tmpdat$Block_noiselevel))
+  r0d$ID <- as.factor(names(VP_data[i]))
+  
+  all_r0 <- rbind(all_r0,r0d)
+  
+  r1d <- as.data.frame(r1)
+  r1d$Block <- as.factor(levels(tmpdat$Block_noiselevel))
+  r1d$ID <- as.factor(names(VP_data[i]))
+  
+  all_r1 <- rbind(all_r1,r1d)
+  
+  r2d <- as.data.frame(r2)
+  r2d$Block <- as.factor(levels(tmpdat$Block_noiselevel))
+  r2d$ID <- as.factor(names(VP_data[i]))
+  
+  all_r2 <- rbind(all_r2,r2d)
+  
+  rt0d <- as.data.frame(rt0)
+  rt0d$Block <- as.factor(levels(tmpdat$Block_noiselevel))
+  rt0d$ID <- as.factor(names(VP_data[i]))
+  
+  all_rt0 <- rbind(all_rt0,rt0d)
+  
+  rt1d <- as.data.frame(rt1)
+  rt1d$Block <- as.factor(levels(tmpdat$Block_noiselevel))
+  rt1d$ID <- as.factor(names(VP_data[i]))
+  
+  all_rt1 <- rbind(all_rt1,rt1d)
+  
+  rt2d <- as.data.frame(rt2)
+  rt2d$Block <- as.factor(levels(tmpdat$Block_noiselevel))
+  rt2d$ID <- as.factor(names(VP_data[i]))
+  
+  all_rt2 <- rbind(all_rt2,rt2d)
+  
+  rtd <- as.data.frame(rt)
+  rtd$Block <- as.factor(levels(tmpdat$Block_noiselevel))
+  rtd$ID <- as.factor(names(VP_data[i]))
+  
+  all_rts <- rbind(all_rts,rtd)
+  
+} # for loop around participants
+
+
+##---- 6. Stats ----
+# Get packages
+require(emmeans)
+require(nlme)
+require(tidyr)
+require(DescTools)
+require(nortest) # for lilliefors tests
+require(car) # for levene tests
+require(rstatix) # for anova_test function
+require(gdata) # for cleaning up
+
+##---- 6.1 Test normality of distribution ----
+##---- 6.1.1 Lilliefors-Test: Normality of distribution - Response rates: ----
+# test normality of distribution using lilliefors tests
+# (for each noise level, SIFI condition & response separately)
+
+all_responses_dfs <- list(all_r0, all_r1, all_r2) # dataframes containing response rates
+all_responses_names <- c(0:2) # responses from 0 - 2
+lillie_all_resp <- data.frame() # placeholder for the lilliefors test results
+
+for (df in 1:3){ # loop responses (there are 3, aka 3 dataframes saved in all_responses_dfs)
+  
+  tmp_df <- all_responses_dfs[[df]] # get current dafaframe
+  
+  # placeholder for lilliefors test results df
+  lillie_results_df <- data.frame()
+  
+  for (i in (1:9)){ # loop sifi conditions (there are 9)
+    
+    # get SIFI condition name from column names in index_df
+    sifi_cond <- names(tmp_df)[i]
+    
+    # get dataframe for the indexed SIFI condition
+    #tmp_sifi_df <- subset(tmp_df, Block != "Kontrollblock loop +noise+")[,c(10,i)] # excl. control block
+    tmp_sifi_df <- tmp_df[,c(10,i)] # incl. control block
+    
+    # loop blocks, run lillie test and save output in df
+    
+    lillie <- data.frame() # placeholder for df for lilliefors test results
+    
+    for (bl in unique(tmp_sifi_df$Block)){ # loop noise condition blocks (there are 9)
+      
+      # There's a "bug" in the lillie.test() function:
+      # If there's a vector of identical values (which occurs in our df), 
+      # the test throws an error message (which is not nice). 
+      # Obviously the data are not normally distributed in such cases, 
+      # but we don't get a value here and that's a problem.
+      
+      # workaround: use NAs instead if there are only identical values:
+      if (length(unique(subset(tmp_sifi_df, Block == bl)[,2])) == 1){
+        D_val <- NA
+        p_val <- NA
+      } 
+      else{
+        # run lilliefors test
+        lillie_result <- lillie.test(subset(tmp_sifi_df, Block == bl)[,2])
+        # get test statistic D and p-value
+        D_val <- round(lillie_result$statistic, digits = 3)
+        # careful, returns 0 if its's < .001:
+        p_val <- round(lillie_result$p.value, digits = 3) 
+      }
+      
+      # save both values in df
+      lillie <- as.data.frame(rbind(lillie, as.data.frame(cbind(bl, D_val, p_val))))
+      
+      # if df is finished, add column with SIFI condition to lillie df
+      if (length(lillie[,1]) == length(unique(tmp_sifi_df$Block))){
+        sifi_condition <-  c(rep(sifi_cond, times = length(lillie[,1])))
+        lillie <- as.data.frame(cbind(sifi_cond, lillie))
+      } #END if loop
+      
+    } #END loop noise conditions aka blocks
+    
+    # add to lillie_results_df
+    lillie_results_df <- as.data.frame(rbind(lillie_results_df, lillie))
+    
+  } #END loop sifi conditions
+  
+  # append name of df as additional column
+  
+  response <- c(rep(all_responses_names[df], times = length(lillie_results_df[,1])))
+  lillie_results_df <- as.data.frame(cbind(response, lillie_results_df))
+  
+  # rbind dataframes
+  lillie_all_resp <- as.data.frame(rbind(lillie_all_resp, lillie_results_df))
+  
+} #END loop responses aka dataframes
+
+rm(lillie, lillie_result, lillie_results_df)
+
+# Have a look at the results:
+# If there's an NA for D and p, it means that there were 
+# only identical values in the tested group.
+# If p = 0 it means p < 0.001
+# View(lillie_results_df)
+
+
+##---- 6.1.2 Lilliefors-Test: Normality of distribution - Reaction times: ----
+# test normality of distribution using lilliefors tests
+# (for each noise level, SIFI condition & response separately)
+
+all_rts_dfs <- list(all_rt0, all_rt1, all_rt2, all_rts) # dfs containing reaction times
+all_rts_names <- c(0:2, "all responses") # responses
+lillie_all_rts <- data.frame() # placeholder for the lilliefors test results
+
+for (df in 1:length(all_rts_dfs)){ # loop dataframes saved in all_responses_dfs
+  
+  tmp_df <- all_rts_dfs[[df]] # get current dafaframe
+  
+  # placeholder for lilliefors test results df
+  lillie_results_df <- data.frame()
+  
+  for (i in (1:9)){ # loop sifi conditions (there are 9)
+    
+    # get SIFI condition name from column names in index_df
+    sifi_cond <- names(tmp_df)[i]
+    
+    # get dataframe for the indexed SIFI condition
+    tmp_sifi_df <- subset(tmp_df, sifi_cond == sifi_cond)[,c(10,i)]
+    
+    # loop blocks, run lillie test and save output in df:
+    
+    lillie <- data.frame() # placeholder for df for lilliefors test results
+    for (bl in unique(tmp_sifi_df$Block)){ # loop blocks
+      
+      # problem: There are some cases in which there's only NA for the median RT 
+      # (e.g. if the SIFI condition was A2V2 and the response we filtered for was 0)
+      
+      # workaround: use NAs instead if there are < 5 non-NA values for the rts:
+      if (length(na.omit(subset(tmp_sifi_df, Block == bl))[,2]) < 5){
+        D_val <- NA
+        p_val <- NA
+      } 
+      else{
+        # run lilliefors test
+        lillie_result <- lillie.test(subset(tmp_sifi_df, Block == bl)[,2])
+        # get test statistic D and p-value
+        D_val <- round(lillie_result$statistic, digits = 3)
+        # careful, returns 0 if its's < .001
+        p_val <- round(lillie_result$p.value, digits = 3) 
+      }
+      
+      # save both values in df
+      lillie <- as.data.frame(rbind(lillie, as.data.frame(cbind(bl, D_val, p_val))))
+      
+      # if df is finished, add column with SIFI condition to lillie df
+      if (length(lillie[,1]) == length(unique(tmp_sifi_df$Block))){
+        sifi_condition <-  c(rep(sifi_cond, times = length(lillie[,1])))
+        lillie <- as.data.frame(cbind(sifi_condition, lillie))
+      } #END if loop
+    } #END loop blocks
+    
+    # add to lillie_results_df
+    lillie_results_df <- as.data.frame(rbind(lillie_results_df, lillie))
+    
+  } #END loop sifi conditions
+  
+  # append name of df as additional column
+  response <- c(rep(all_rts_names[df], times = length(lillie_results_df[,1])))
+  lillie_results_df <- as.data.frame(cbind(response, lillie_results_df))
+  
+  # rbind dataframes
+  lillie_all_rts <- as.data.frame(rbind(lillie_all_rts, lillie_results_df))
+  
+} #END loop dataframes
+
+# clean up:
+rm(lillie, lillie_result, lillie_results_df, 
+   bl, df_name, sifi_cond, sifi_condition, 
+   p_val, D_val, i, tmp_sifi_df, tmp_df)
+
+# Have a look at the results:
+# If there's an NA for D and p, it means that there were 
+# only identical values in the tested group.
+# If p = 0 it means p < 0.001
+# View(lillie_results_df)
+
+##---- 6.2 ANOVAs / Friedman tests & post hoc comparisons ----
+
+##---- 6.2.1 Test differences between response rates: ----
+# Is there a difference between response rates between the noise levels?
+# --> Check for each SIFI condition & response (0, 1 & 2) separately! 
+
+# test illusionrate / rate of correct answers ~ block (for every SIFI condition):
+# A2V1, response = 2 (illusion rate)
+# A0V1, response = 1 (rate of correct answers)
+# A0V2, response = 2 (rate of correct answers)
+# A1V0, response = 0 (rate of correct answers)
+# A1V1, response = 1 (rate of correct answers)
+# A1V2, response = 1 (illusion rate)
+# A2V0, response = 0 (rate of correct answers)
+# A2V2, response = 2 (rate of correct answers)
+# A2V1late, response = 2 (illusion rate)
+
+# get sifi condition names:
+sifi_conds <- colnames(all_r0)[1:9]
+# create vector of corresponding responses we'd like to have a look at:
+sifi_response <- c(1, 2, 0, 1, 1, 0, 2, 2, 2)
+# get names of noise levels:
+noise_levels <- as.character(unique(all_r0$Block))
+
+# Reminder: 
+# response rates are in all_responses_dfs
+# (separated by responses)
+
+# placeholder for the results from the ANOVAs / Friedman tests
+friedman_resp <- data.frame()
+
+for (idx_sifi in 1:length(sifi_conds)){ # loop sifi conditions & responses
+  sifi_name <- sifi_conds[idx_sifi] # get name of current SIFI condition
+  sifi_resp <- sifi_response[idx_sifi] # get response
+  
+  # see if we need a Friedman's test or an ANOVA (exclude control block):
+  lillie_res <-  subset(lillie_all_resp, sifi_cond == sifi_name & 
+                          response == sifi_resp & 
+                          bl != "Kontrollblock loop +noise+")
+  
+  # Hint: In this case, we don't need levene tests because the results of the 
+  # lilliefors tests were all significant. So we'll run only Friedman's tests anyway.
+  
+  # if there are NAs (if there were all the same values in the tested group) 
+  # or the lilliefors tests were significant (= data not normally distr.), 
+  # use a Friedman's test instead of an ANOVA
+  if (any(is.na(lillie_res$p_val) | lillie_res$p_val <= 0.05)){ # friedman if loop
+  
+    # find correct df for the response:
+    tmp_df <- all_responses_dfs[[sifi_resp + 1]] # add 1 --> index starts with 1, not 0 like first response
+    
+    # create matrix (one column for each noise level):
+    sample_resp <- matrix(c(subset(tmp_df, Block == noise_levels[1])[idx_sifi],
+                            subset(tmp_df, Block == noise_levels[2])[idx_sifi],
+                            subset(tmp_df, Block == noise_levels[3])[idx_sifi],
+                            subset(tmp_df, Block == noise_levels[4])[idx_sifi],
+                            subset(tmp_df, Block == noise_levels[5])[idx_sifi],
+                            subset(tmp_df, Block == noise_levels[6])[idx_sifi],
+                            subset(tmp_df, Block == noise_levels[7])[idx_sifi],
+                            subset(tmp_df, Block == noise_levels[8])[idx_sifi]),
+                          # "Kontrollblock loop +noise+" excluded:
+                          #subset(tmp_df, Block == noise_levels[9])[idx_sifi]), 
+                          ncol=8) # make this 9 if you want to include the control block
+    
+    # run Friedman's test:
+    fried_test <- friedman.test(sample_resp)
+    
+    # create test name:
+    test_name <-  "Friedman"
+    
+    # create description of comparison:
+    comparison <- paste("all noise levels in", as.character(sifi_name), 
+                        "with response =", as.character(sifi_resp), 
+                        sep = " ")
+    
+    # get test statistic chi^2:
+    chi_squared <- round(as.numeric(fried_test$statistic), digits = 3)
+    
+    # get degrees of freedom (df):
+    degrees_of_freedom <- round(as.numeric(fried_test$parameter), digits = 3)
+    
+    # get p-value:
+    p <- round(as.numeric(fried_test$p.value), digits = 3)
+    
+    # add asterix in the last column if result is significant:
+    significance <- " "
+    if (p <= 0.05){
+      significance <- " * " 
+    }
+    
+    # create placeholder for test statistic of Wilcoxon signed-rank tests:
+    W <- " "
+    
+    # combine values to row and put into results df:
+    friedman_resp <- as.data.frame(rbind(friedman_resp, 
+                                         cbind(test_name, comparison, chi_squared, W, 
+                                               degrees_of_freedom, p, significance)))
+    
+    # if significant...
+    if (p <= 0.05){
+      
+      # run post-hoc Wilcoxon signed-rank tests 
+      # for all noise level combinations
+      
+      # Idea: We always compare 2 groups, so loop all noise levels 
+      # to get group 1, but leave out the last block (group 1 can't be 
+      # the last block or else there's nothing left to be compared with)
+      # and exclude control block.
+      # To get group 2, we have to loop all noise levels 
+      # that haven't been group 1 (aka all that are left).
+      
+      # loop noise levels, leave out control block & last block:
+      for (i in 1:(length(noise_levels)-2)){ 
+        
+        # get group 1:
+        group_1 <- noise_levels[i] 
+        
+        # take all levels that are left except for the control block
+        # control block = last noise level
+        comp_groups <- noise_levels[(i+1):(length(noise_levels)-1)] 
+        
+        for (group_2 in comp_groups){
+          
+          # run Wilcoxon signed-rank test:
+          wilc <- wilcox.test(as.numeric(unlist(subset(tmp_df, Block == group_1)[idx_sifi])), 
+                              as.numeric(unlist(subset(tmp_df, Block == group_2)[idx_sifi])), 
+                              alternative = "two.sided", # two sided test
+                              paired = T, # paired sample 
+                              exact = F)
+          
+          # create test name:
+          test_name <- "       Wilcoxon signed-rank test"
+          
+          # create description of comparison:
+          comparison <- paste("     ", as.character(sifi_name), "in", as.character(group_1), 
+                              "vs.", as.character(group_2),
+                              sep = " ")
+        
+          # get test statistic W:
+          W <- round(as.numeric(wilc$statistic), digits = 3)
+          
+          # get p-value:
+          # Bonferroni correction: Multiply with 28 for the 28 pairs we compare here:
+          p <- round(as.numeric(wilc$p.value)*28, digits = 3)
+          
+          # add asterix in last column if result is significant:
+          significance <- " "
+          if (p <= 0.05){
+            significance <- " * "
+          }
+          
+          # create placeholders for degrees of freedom &
+          # test statistic of Friedman's test:
+          chi_squared <- " "
+          degrees_of_freedom <- " "
+          
+          # combine values to row and put into results df:
+          friedman_resp <- as.data.frame(rbind(friedman_resp, 
+                                               cbind(test_name, comparison, chi_squared, W, 
+                                                     degrees_of_freedom, p, significance)))
+        } # End loop comp groups
+      } # End loop noise levels
+    } # End if loop for Wilcoxon signed-rank test 
+  } # End friedman if loop; no "else" condition needed here as we have 
+    # to use Friedman tests in all conditions anyway
+} # End loop sifi conditions & responses
+
+rm(idx_sifi, sifi_name, sifi_resp, lillie_res, 
+   sample_resp, tmp_df, group_1, group_2, comp_groups, 
+   i, test_name, comparison, chi_squared, W, 
+   degrees_of_freedom, p, significance)
+
+
+##---- 6.2.2 Test differences between reaction times: ----
+
+# Is there a difference between reaction times between the noise levels?
+# --> Check for each SIFI condition separately!
+
+# Reminder: 
+# noise levels are in noise_levels
+# sifi condition names are in sifi_cons
+# reaction times are in all_rts
+# lilliefors test results are in lillie_all_rts
+
+# placeholder for the results dfs:
+friedman_rts <- data.frame() # ANOVAs & post-hoc tests results
+levene_res <- data.frame() # Levene test results
+mauchlys_res <- data.frame() # Mauchly's test results
+
+for (idx_sifi in 1:length(sifi_conds)){ # loop sifi conditions 
+  
+  # get name of current SIFI condition:
+  sifi_name <- sifi_conds[idx_sifi] 
+  
+  # see if we need a Friedman's test or an ANOVA (exclude control block):
+  
+  # get results of lilliefors tests in current sifi condition:
+  lillie_res <-  subset(lillie_all_rts, sifi_condition == sifi_name & 
+                          response == "all responses" & 
+                          bl != "Kontrollblock loop +noise+")
+  
+  # Test homogeneity of variance: Run Levene test
+  
+  # get data for Levene test:
+  levene_data <- subset(all_rts[c(idx_sifi, 10)], Block != "Kontrollblock loop +noise+")
+  
+  # run Levene test:
+  levene <- leveneTest(unlist(levene_data[1]) ~ Block, data = levene_data)
+  
+  # get degrees of freedom:
+  levene_df <- paste("(", 
+                     paste(as.character(unlist(levene[1])[1]), 
+                           as.character(unlist(levene[1])[2]),
+                           sep = ", "), 
+                     ")", 
+                     sep = "")
+  
+  # get test statistic F:
+  levene_F <- as.numeric(round(as.numeric(unlist(levene[2])[1]), digits = 3))
+  
+  # get p-value:
+  levene_p <- as.numeric(round(as.numeric(unlist(levene[3])[1]), digits = 3))
+  
+  # put levene test result into dataframe
+  levene_res <- rbind(levene_res, cbind(sifi_name, levene_df, levene_F, levene_p))
+  
+  # If Levene test was significant
+  # or if there are NAs (if there were all the same values in the tested group) 
+  # or if the lilliefors tests were significant (= data not normally distr.), 
+  # use a Friedman's test instead of an ANOVA
+  if (levene_p <= 0.05| any(is.na(lillie_res$p_val) | lillie_res$p_val <= 0.05)){ # friedman if loop
+
+    # create matrix (each column contains data for the respective noise level):
+    sample_rts <- matrix(c(subset(all_rts, Block == noise_levels[1])[idx_sifi],
+                           subset(all_rts, Block == noise_levels[2])[idx_sifi],
+                           subset(all_rts, Block == noise_levels[3])[idx_sifi],
+                           subset(all_rts, Block == noise_levels[4])[idx_sifi],
+                           subset(all_rts, Block == noise_levels[5])[idx_sifi],
+                           subset(all_rts, Block == noise_levels[6])[idx_sifi],
+                           subset(all_rts, Block == noise_levels[7])[idx_sifi],
+                           subset(all_rts, Block == noise_levels[8])[idx_sifi]),
+                         # "Kontrollblock loop +noise+" excluded:
+                         #subset(all_rts, Block == noise_levels[9])[idx_sifi]), 
+                         ncol=8) # make this 9 if you want to include the control block
+    
+    # run Friedman's test & save result in "fried_test":
+    fried_test <- friedman.test(sample_rts)
+    
+    # create test name:
+    test_name <-  "Friedman"
+    
+    # create description of comparison:
+    comparison <- paste("all noise levels in", as.character(sifi_name), sep = " ")
+    
+    # get test statistic (chi squared):
+    chi_squared <- round(as.numeric(fried_test$statistic), digits = 3)
+    
+    # get degrees of freedom (df):
+    degrees_of_freedom <- as.character(round(as.numeric(fried_test$parameter), digits = 3))
+    
+    # get p-value:
+    p <- round(as.numeric(fried_test$p.value), digits = 3)
+    
+    # add asterix in the last column if result is significant:
+    significance <- " "
+    if (p <= 0.05){
+      significance <- " * " 
+    }
+    
+    # placeholders for test statistics of 
+    # Wilcoxon signed-rank tests, ANOVA & t-tests:
+    W <- " "
+    F_val <- " "
+    T_val <- " "
+    
+    # combine values to row and put into results df:
+    friedman_rts <- as.data.frame(rbind(friedman_rts, 
+                                        cbind(test_name, comparison, 
+                                              chi_squared, F_val, W, T_val,
+                                              degrees_of_freedom, p, significance)))
+    
+    # if significant...
+    if (p <= 0.05){
+      
+      # run post-hoc Wilcoxon signed-rank tests 
+      # for all noise level combinations
+      
+      # Idea: We always compare 2 groups, so loop all noise levels 
+      # to get group 1, but leave out the last block (group 1 can't be 
+      # the last block or else there's nothing left to be compared with)
+      # and exclude control block.
+      # To get group 2, we have to loop all noise levels 
+      # that haven't been group 1 (aka all that are left).
+      
+      # loop noise levels, leave out control block & last block:
+      for (i in 1:(length(noise_levels)-2)){ # loop noise levels 
+        
+        # get group 1:
+        group_1 <- noise_levels[i] 
+        
+        # take all levels that are left except for the control block
+        # control block = last noise level
+        comp_groups <- noise_levels[(i+1):(length(noise_levels)-1)] 
+        
+        for (group_2 in comp_groups){ # loop groups for group 2
+          
+          # run Wilcoxon signed-rank test and save result in "wilc":
+          wilc <- wilcox.test(as.numeric(unlist(subset(all_rts, Block == group_1)[idx_sifi])), 
+                              as.numeric(unlist(subset(all_rts, Block == group_2)[idx_sifi])), 
+                              alternative = "two.sided", # two sided test
+                              paired = T, # paired sample 
+                              exact = F)
+          
+          # create test name: 
+          test_name <- "       Wilcoxon signed-rank test"
+          # create description of comparison:
+          comparison <- paste("     ", as.character(sifi_name), "in", as.character(group_1), 
+                              "vs.", as.character(group_2),
+                              sep = " ")
+          # get p value:
+          # Bonferroni correction: multiply p by 28 because there are 28 pairs
+          p <- round(as.numeric(wilc$p.value)*28, digits = 3) 
+          
+          # get test statistic W:
+          W <- round(as.numeric(wilc$statistic), digits = 3)
+          
+          # placeholders for degrees of freedom & test statistic 
+          # of Friedman's test, t-Test & ANOVA: 
+          chi_squared <- " "
+          T_val <- " "
+          degrees_of_freedom <- " "
+          
+          # add asterix in the last column if result is significant:
+          significance <- " "
+          if (p <= 0.05){
+            significance <- " * "
+          } 
+          
+          # combine values to row and put into results df:
+          friedman_rts <- as.data.frame(rbind(friedman_rts, 
+                                              cbind(test_name, comparison, 
+                                                    chi_squared, F_val, W, T_val, 
+                                                    degrees_of_freedom, p, significance)))
+          
+          
+        } # End loop groups for group 2
+      } # End loop noise levels 
+    } # End if loop for post-hoc comparisons
+  } else {
+    # if the lilliefors tests were all not significant,
+    # run an ANOVA:
+    
+    # get dataframe containing all RTs for the current SIFI condition, 
+    # the noise level (in Block) and the participants' IDs
+    tmp_df <- subset(all_rts, Block != "Kontrollblock loop +noise+")[c(idx_sifi, 10,11)]
+    tmp_df$Block <- relevel(tmp_df$Block, ref="main baseline +noise+")
+    
+    # run ANOVA:
+    
+    # anova_test() is a wrapper around the Anova() and aov() functions
+    # and provides Mauchly's test results as well as 
+    # Greenhouse-Geisser-corrected p-values, 
+    # so we use this one instead of aov() (sorry Julian):
+    anova_res <- anova_test(data = tmp_df, 
+                            formula = unlist(tmp_df[1]) ~ Block + Error(ID/Block))
+    
+    # create test name:
+    test_name <-  "ANOVA"
+    
+    # create description of comparison:
+    comparison <- paste("all noise levels in", as.character(sifi_name), sep = " ")
+    
+    # get ANOVA F-value:
+    F_val <-  round(as.numeric(anova_res$`ANOVA`[4]), digits = 3)
+    
+    # get ANOVA p-value:
+    p_val <- round(as.numeric(anova_res$`ANOVA`[5]), digits = 3)
+    
+    # get ANOVA degrees of freedom:
+    degrees_of_freedom <- paste("(", paste(as.character(anova_res$`ANOVA`[2]), 
+                                           as.character(anova_res$`ANOVA`[3]),
+                                           sep = ", "), 
+                                ")", 
+                                sep = "")
+    
+    # If the result of Mauchly's test is significant, we have to apply the 
+    # Greenhouse-Geisser-correction as it indicates that sphericity is not given. 
+    
+    # get Mauchly's test results
+    mauchlys_W <- round(as.numeric(anova_res$`Mauchly's Test for Sphericity`[2]), digits = 3)
+    mauchlys_p <- round(as.numeric(anova_res$`Mauchly's Test for Sphericity`[3]), digits = 3)
+    
+    # put into df for mauchly's results:
+    mauchlys_res <- rbind(mauchlys_res, cbind(sifi_name, mauchlys_W, mauchlys_p))
+    
+    # save corrected p values if mauchly's test was significant:
+    if (mauchlys_p <= 0.05){
+      p_val <- round(as.numeric(anova_res$`Sphericity Corrections`[4]), digits = 3)
+    } 
+    
+    # add asterix in the last column if result is significant:
+    significance <- " "
+    if (p < 0.05){
+      significance <- " * "
+    }
+    
+    # create placeholders for test statistics of 
+    # Friedman's test, Wilcoxon signed-rank tests &  t-test:
+    chi_squared <- " "
+    W <- " "
+    T_val <- " "
+    
+    # combine values to row and put into results df:
+    friedman_rts <- as.data.frame(rbind(friedman_rts, 
+                                        cbind(test_name, comparison, 
+                                              chi_squared, F_val, W, T_val,
+                                              degrees_of_freedom, p, significance)))
+    
+    # Pairwise post-hoc comparisons
+    if (p <= 0.05){
+      # run post-hoc t-tests 
+      # for all noise level combinations
+      
+      # Idea: We always compare 2 groups, so loop all noise levels 
+      # to get group 1, but leave out the last block (group 1 can't be 
+      # the last block or else there's nothing left to be compared with)
+      # and exclude control block.
+      # To get group 2, we have to loop all noise levels 
+      # that haven't been group 1 (aka all that are left).
+      
+      # loop noise levels, leave out control block & last block:
+      for (i in 1:(length(noise_levels)-2)){ # loop noise levels 
+        
+        # get group 1:
+        group_1 <- noise_levels[i] 
+        
+        # take all levels that are left except for the control block
+        # control block = last noise level
+        comp_groups <- noise_levels[(i+1):(length(noise_levels)-1)] 
+        
+        for (group_2 in comp_groups){ # loop groups for group 2
+          
+          # run t-test and save results in "ttest":
+          ttest <- t.test(as.numeric(unlist(subset(all_rts, Block == group_1)[idx_sifi])), 
+                          as.numeric(unlist(subset(all_rts, Block == group_2)[idx_sifi])), 
+                          alternative = "two.sided", # two sided test
+                          paired = T, # paired sample 
+                          exact = F)
+          
+          # save p-value and test statistic to results df 
+          # create test name:
+          test_name <- "       t-test"
+          
+          # create description of comparison:
+          comparison <- paste("     ", as.character(sifi_name), "in", as.character(group_1), 
+                              "vs.", as.character(group_2),
+                              sep = " ")
+          
+          # get degrees of freedom (df):
+          degrees_of_freedom <- as.character(round(as.numeric(ttest$parameter), digits = 3))
+          
+          # get test statistic T:
+          T_val <- round(as.numeric(ttest$statistic), digits = 3)
+          
+          # get p-value:
+          # Bonferroni correction: Multiply with 28 as there are 28 pairs
+          p <- round(as.numeric(ttest$p.value)*28, digits = 3)
+          
+          # add asterix in the last column if result is significant:
+          significance <- " "
+          if (p <= 0.05){
+            significance <- " * "
+          } 
+          
+          # add placeholders for test statistics of 
+          # Wilcoxon signed-rank tests, ANOVA & Friedman's test:
+          W <- " "
+          F_val <- " "
+          chi_squared <- " "
+          
+          # combine values to row and put into results df:
+          friedman_rts <- as.data.frame(rbind(friedman_rts, 
+                                              cbind(test_name, comparison, 
+                                                    chi_squared, F_val, W, T_val, 
+                                                    degrees_of_freedom, p, significance)))
+
+        } # End loop groups for group 2
+      } # End loop noise levels
+    } # End post-hoc comparisons
+  } # End Friedman / ANOVA loop
+} # End loop sifi conditions & responses
+
+# clean up a little
+rm(idx_sifi, sifi_name, lillie_res, 
+   tmp_df, group_1, group_2, comp_groups, 
+   i, test_name, comparison, chi_squared, W, 
+   degrees_of_freedom, p, significance, 
+   levene_data, levene_df, levene_F, levene_p, 
+   mauchlys_p, mauchlys_W,
+   b, c, df, F_val, p_val, resp, all_responses_names, 
+   allresp, blocks, comp, cond, T_val, 
+   wilc, fried_test, anova_res)
+
+# The results for the comparisons of reaction times in each 
+# block are in "friedman_rts".
+# View(friedman_rts)
+
+# The results for the levene tests are in levene_res:
+# View(levene_res)
+
+# The results for mauchly's tests are in mauchlys_res:
+# View(mauchlys_res)
+
+
+##---- 6.3 Linear or quadratic model? ----
+
+# Let's pretend the noise steps are ordinal scaled to check for quadratic trend along the noise steps
+A2V1_noise <- subset(A2V1[A2V1$Block != "main baseline +noise+",], select = c(A2V1,Block,ID))
+
+# 6.3.1 Linear model
+A2V1_noise$BlockN <- as.numeric(A2V1_noise$Block)
+lmer1 <- lme(fixed=A2V1 ~ BlockN, random=~1|ID, data = A2V1_noise)
+anova(lmer1)
+
+# 6.3.2 Quadratic Model
+A2V1_noise$BlockN2 <- A2V1_noise$BlockN^2
+lmer2 <- lme(fixed=A2V1 ~ BlockN + BlockN2, random=~1|ID, data = A2V1_noise)
+anova(lmer2)
+
+# Export for JASP for sanity checks
+A2V1s <- spread(A2V1,Block,A2V1)
+write.csv(A2V1s,file = "A2V1_Table.csv")
+
+
+
+
+##---- 7. Plots ----
+
+# TO DO:
+# plot stuff (rainclouds with mean & SD --> not SEM as whiskers?)
+# build table with M, SD & stuff
