@@ -218,6 +218,17 @@ for(i in 1:length(VP_data)) {
 
 ##---- 6. Stats ----
 # Get packages
+
+packages <- c("emmeans", "nlme", "tidyr", "DescTools", 
+              "nortest",  "car", "rstatix","gdata")
+
+# install packages if they're not installed yet:
+not_installed <- setdiff(packages, rownames(installed.packages()))
+
+if (length(not_installed) > 0) {
+  install.packages(not_installed)
+}
+
 require(emmeans)
 require(nlme)
 require(tidyr)
@@ -931,6 +942,325 @@ write.csv(A2V1s,file = "A2V1_Table.csv")
 
 ##---- 7. Plots ----
 
-# TO DO:
-# plot stuff (rainclouds with mean & SD --> not SEM as whiskers?)
-# build table with M, SD & stuff
+# Get packages
+packages <- c("reshape2", # for reshaping dfs
+              "doBy", # for summarizing data
+              "stringr", # for getting substrings
+              # those are for the rainclouds:
+              "ggplot2", "dplyr",  "plyr", "bitops",
+              "cowplot", "lavaan", "readr", "smooth",
+              "rmarkdown", "Hmisc", "caTools")
+
+# install packages if they're not installed yet:
+not_installed <- setdiff(packages, rownames(installed.packages()))
+
+if (length(not_installed) > 0) {
+  install.packages(not_installed)
+}
+
+require("reshape2")
+require("doBy")
+require("stringr")
+require("ggplot2") 
+require("dplyr")  
+require("plyr")
+require("bitops")
+require("cowplot") 
+require("lavaan")
+require("readr") 
+require("smooth")
+require("rmarkdown") 
+require("Hmisc") 
+require("caTools")
+
+
+##---- 7.1 Summarize data ----
+##---- 7.1.1 Change structure of dataframes ----
+
+# get dataframes we want to summarize:
+all_rs <- list(all_r0, all_r1, all_r2) # response rates
+all_rts <- list(all_rt0, all_rt1, all_rt2) # reaction times
+
+# build placeholders for the reshaped dfs:
+all_responses_rts <- data.frame()
+all_responses_resprates <- data.frame()
+
+# reshape dfs:
+for (i in 1:3){ # loop dataframes all_rs & all_rts
+  
+  tmp_resps <- all_rs[[i]] # get current dataframe w/ response rates
+  tmp_rts <- all_rts[[i]] # get current dataframe w/ reaction times
+  
+  # first for the response rates:
+  # get vector with responses for response rates dfs & append it:
+  Response <- c(rep(i-1, times = length(tmp_resps[1])))
+  # append to df
+  tmp_resps <- as.data.frame(cbind(Response, tmp_resps))
+  # reshape to long format
+  data_resp_long <- gather(tmp_resps, Condition, Response_Rate, A0V1:A2V2, factor_key = TRUE)
+  # save in all_responses_resprates
+  all_responses_resprates <- rbind(all_responses_resprates, data_resp_long)
+  
+  # Again for the reaction times:
+  # create vector with response number
+  Response <- c(rep(i-1, times = length(tmp_rts[1])))
+  # append to df
+  tmp_rts <- as.data.frame(cbind(Response, tmp_rts))
+  # reshape to long format
+  data_rts_long <- gather(tmp_rts, Condition, RT, A0V1:A2V2, factor_key = TRUE)
+  # save in all_responses_rts
+  all_responses_rts <- rbind(all_responses_rts, data_rts_long)
+  
+} # End loop dataframes
+
+# exclude control block:
+all_responses_rts <- subset(all_responses_rts, Block != "Kontrollblock loop +noise+")
+all_responses_resprates <- subset(all_responses_resprates, Block != "Kontrollblock loop +noise+")
+
+# rename noise levels
+new_levels <- list("1" = "main +noise+ condition1", 
+                   "2" = "main +noise+ condition2", 
+                   "3" = "main +noise+ condition3",
+                   "4" = "main +noise+ condition4",
+                   "5" = "main +noise+ condition5",
+                   "6" = "main +noise+ condition6",
+                   "7" = "main +noise+ condition7",
+                   "Baseline" = "main baseline +noise+")
+
+levels(all_responses_rts$Block) <- new_levels
+levels(all_responses_resprates$Block) <- new_levels
+
+# Look at the reshaped datasets:
+#View(all_responses_rts)
+#View(all_responses_resprates)
+
+
+##---- 7.1.2 Summarize the data ----
+
+# Summarize response rates...
+# ...divided by Block, Condition & Response:
+summary_resps1 <- summaryBy(Response_Rate ~ Block + Condition + Response, 
+                           data = all_responses_resprates,
+                           FUN = function(x) { c(M = round(mean(x, na.rm = T), digits = 3), 
+                                                 SD = round(sd(x, na.rm = T), digits = 3), 
+                                                 N = length(x)) })
+
+# ...divided by Condition & Response:
+summary_resps2 <- summaryBy(Response_Rate ~ Condition + Response, 
+                           data = all_responses_resprates,
+                           FUN = function(x) { c(M = round(mean(x, na.rm = T), digits = 3), 
+                                                 SD = round(sd(x, na.rm = T), digits = 3), 
+                                                 N = length(x)) })
+
+# ...divided by Block:
+summary_resps3 <- summaryBy(Response_Rate ~ Block, 
+                            data = all_responses_resprates,
+                            FUN = function(x) { c(M = round(mean(x, na.rm = T), digits = 3), 
+                                                  SD = round(sd(x, na.rm = T), digits = 3), 
+                                                  N = length(x)) })
+
+# ...divided by Block & Condition:
+summary_resps4 <- summaryBy(Response_Rate ~ Block + Condition, 
+                            data = all_responses_resprates,
+                            FUN = function(x) { c(M = round(mean(x, na.rm = T), digits = 3), 
+                                                  SD = round(sd(x, na.rm = T), digits = 3), 
+                                                  N = length(x)) })
+
+# Summarize reaction times (RTs)...
+# ...divided by Block, Condition & Response:
+summary_rts1 <- summaryBy(RT ~ Block + Condition + Response, 
+               data = all_responses_rts,
+               FUN = function(x) { c(M = round(mean(x, na.rm = T), digits = 3), 
+                                     SD = round(sd(x, na.rm = T), digits = 3), 
+                                     N = length(x)) })
+# ...divided by Condition & Response:
+summary_rts2 <- summaryBy(RT ~ Condition + Response, 
+                         data = all_responses_rts,
+                         FUN = function(x) { c(M = round(mean(x, na.rm = T), digits = 3), 
+                                               SD = round(sd(x, na.rm = T), digits = 3), 
+                                               N = length(x)) })
+
+# ...divided by Block:
+summary_rts3 <- summaryBy(RT ~ Block, 
+                          data = all_responses_rts,
+                          FUN = function(x) { c(M = round(mean(x, na.rm = T), digits = 3), 
+                                                SD = round(sd(x, na.rm = T), digits = 3), 
+                                                N = length(x)) })
+
+# ...divided by Block & Condition:
+summary_rts4 <- summaryBy(RT ~ Block + Condition, 
+                          data = all_responses_rts,
+                          FUN = function(x) { c(M = round(mean(x, na.rm = T), digits = 3), 
+                                                SD = round(sd(x, na.rm = T), digits = 3), 
+                                                N = length(x)) })
+
+
+##---- 7.2 Plot sign. effects ---- 
+
+# 7.2.1 Plot settings ---- 
+# Set up flat violin function in ggplot ----
+# This part is from Tom Rhys Marshall's Github page:
+# https://github.com/RainCloudPlots/RainCloudPlots/blob/master/tutorial_R/R_rainclouds.R
+
+"%||%" <- function(a, b) {
+  if (!is.null(a)) a else b
+}
+
+geom_flat_violin <- function(mapping = NULL, data = NULL, stat = "ydensity",
+                             position = "dodge", trim = TRUE, scale = "area",
+                             show.legend = NA, inherit.aes = TRUE, ...) {
+  layer(
+    data = data,
+    mapping = mapping,
+    stat = stat,
+    geom = GeomFlatViolin,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      trim = trim,
+      scale = scale,
+      ...
+    )
+  )
+}
+
+GeomFlatViolin <-
+  ggproto("GeomFlatViolin", Geom,
+          setup_data = function(data, params) {
+            data$width <- data$width %||%
+              params$width %||% (resolution(data$x, FALSE) * 0.9)
+            
+            # ymin, ymax, xmin, and xmax define the bounding rectangle for each group
+            data %>%
+              group_by(group) %>%
+              mutate(
+                ymin = min(y),
+                ymax = max(y),
+                xmin = x,
+                xmax = x + width / 2
+              )
+          },
+          
+          draw_group = function(data, panel_scales, coord) {
+            # Find the points for the line to go all the way around
+            data <- transform(data,
+                              xminv = x,
+                              xmaxv = x + violinwidth * (xmax - x)
+            )
+            
+            # Make sure it's sorted properly to draw the outline
+            newdata <- rbind(
+              plyr::arrange(transform(data, x = xminv), y),
+              plyr::arrange(transform(data, x = xmaxv), -y)
+            )
+            
+            # Close the polygon: set first and last point the same
+            # Needed for coord_polar and such
+            newdata <- rbind(newdata, newdata[1, ])
+            
+            ggplot2:::ggname("geom_flat_violin", GeomPolygon$draw_panel(newdata, panel_scales, coord))
+          },
+          
+          draw_key = draw_key_polygon,
+          
+          default_aes = aes(
+            weight = 1, colour = "grey20", fill = "white", size = 0.5,
+            alpha = NA, linetype = "solid"
+          ),
+          
+          required_aes = c("x", "y")
+  )
+
+
+# 7.2.1 Prepare data for plotting ---- 
+
+# For the reaction times - plot data from all_responses_rts:
+
+# save descriptions of all significant post-hoc differences in a vector
+pos_sign_effect <- which(friedman_rts$significance == " * " & 
+                         friedman_rts$test_name != "       Wilcoxon signed-rank test")
+
+
+for(pos in pos_sign_effect){ # loop positions of found effects
+  
+  # get condition name from comparison description:
+  sifi_cond <- str_sub(friedman_rts[pos, 2], -4, -1)
+  # get response:
+  response <- sifi_response[which(sifi_conds == sifi_cond)] 
+  
+  # get data for sifi_cond & response:
+  # @ Julian: What do we do about NAs (e.g. if someone didn't 
+  # perceive the 2 flashes in A2V1 in a certain block, 
+  # there'll be an NA in the df)
+  
+  # for now, I'll "exclude" all NA trials from the plot
+  tmp_rts <- subset(all_responses_rts, 
+                    Condition == sifi_cond & 
+                    Response == response &
+                    !is.na(RT))
+  
+  # change order of the noise levels: 
+  tmp_rts$Block <- factor(tmp_rts$Block, levels = c("Baseline", "1", 
+                                                    "2", "3", "4", 
+                                                    "5", "6", "7"))
+  
+  # set custom colors (set as many colors as clouds):
+  custom_col <- c("#969cc8", "#e1eedf", "#d7e9d5", "#cde3ca", 
+                  "#c3dec0", "#b9d8b5", "#afd3ab", "#9CC896")
+  
+  # Create raincloud plot:
+  plot <-  ggplot(tmp_rts, aes(x = Block, 
+                               y = RT, 
+                               fill = Block)) +
+           # add violins (aka the cloud):
+           geom_flat_violin(position = position_nudge(x = .25, y = 0), # push violins a little off center
+                            adjust = .7, # smoothing of the density curve
+                            alpha = 1, # opacity of the density curve
+                            trim = T) + # cut off violins at the ends
+           # add scatter points (aka the rain):
+           geom_point(position = position_jitter(width = .15), # jitter, so points don't overlap
+                      shape = 21, # just dots as shape
+                      size = 1) + # set point size here
+           # add boxplot:
+           geom_boxplot(aes(x = Block, y = RT),
+                        position = position_nudge(x = .25, y = 0), # move it up a little
+                        outlier.shape = NA, # don't mark outliers
+                        alpha = 0.3, # set opacity of boxplot fill color
+                        width = .1, # set width of box
+                        colour = "BLACK") +  
+           # add axes titles:
+           ylab("reaction time in ms") +
+           xlab("noise level") + 
+           # change scaling & ticks of y-axis (actually the x-axis 
+           # because we turn the plot around):
+           scale_y_continuous(breaks = seq(from = 0, 
+                                           to = 1600, 
+                                           by = 200),
+                              limits = c(0, 1700)) +
+           # change padding under the first cloud so the 
+           # points don't touch the axis:
+           scale_x_discrete(expand = c(0.03, .5)) + 
+           # flip the violins so they're horizontal:
+           coord_flip() + 
+           # use cowplot theme:
+           theme_cowplot() +
+           # don't use different point styles
+           guides(fill = FALSE, colour = FALSE) +
+           # set colors with color palette:
+           #scale_colour_brewer(palette = "Dark2") + # border color
+           #scale_fill_brewer(palette = "Dark2") + # fill color
+           # set colors manually:
+           scale_color_manual(values = custom_col) +  
+           scale_fill_manual(values = custom_col) +
+           # set title  
+           ggtitle(paste("Median reaction times in ", sifi_cond, ", response = ", response, sep = ""))
+
+  # assign name to plot: 
+  assign(paste("plot_", sifi_cond, "_resp_", response, sep = ""), 
+         plot) 
+
+  # you can also save the plot, just fill in the missing details: 
+  #ggsave("set_path_here", width = w, height = h)
+  
+} # END loop positions of found effects
