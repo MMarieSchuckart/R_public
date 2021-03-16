@@ -1025,7 +1025,7 @@ new_levels <- list("1" = "main +noise+ condition1",
                    "5" = "main +noise+ condition5",
                    "6" = "main +noise+ condition6",
                    "7" = "main +noise+ condition7",
-                   "Baseline" = "main baseline +noise+")
+                   "BL" = "main baseline +noise+")
 
 levels(all_responses_rts$Block) <- new_levels
 levels(all_responses_resprates$Block) <- new_levels
@@ -1181,15 +1181,16 @@ GeomFlatViolin <-
 pos_sign_effect <- which(friedman_rts$significance == " * " & 
                          friedman_rts$test_name != "       Wilcoxon signed-rank test")
 
+# set custom colors (set as many colors as clouds):
+custom_col <- c("#969cc8", "#e1eedf", "#d7e9d5", "#cde3ca", 
+                "#c3dec0", "#b9d8b5", "#afd3ab", "#9CC896")
 
 for(pos in pos_sign_effect){ # loop positions of found effects
-  
+
   # get condition name from comparison description:
-  sifi_cond <- str_sub(friedman_rts[pos, 2], -4, -1)
-  # get response:
-  response <- sifi_response[which(sifi_conds == sifi_cond)] 
+  sifi_cond <- str_sub(friedman_rts[pos, 2], 21, -1)
   
-  # get data for sifi_cond & response:
+  # get data for sifi_cond:
   # @ Julian: What do we do about NAs (e.g. if someone didn't 
   # perceive the 2 flashes in A2V1 in a certain block, 
   # there'll be an NA in the df)
@@ -1197,18 +1198,11 @@ for(pos in pos_sign_effect){ # loop positions of found effects
   # for now, I'll "exclude" all NA trials from the plot
   tmp_rts <- subset(all_responses_rts, 
                     Condition == sifi_cond & 
-                    Response == response &
                     !is.na(RT))
   
   # change order of the noise levels: 
-  tmp_rts$Block <- factor(tmp_rts$Block, levels = c("Baseline", "1", 
-                                                    "2", "3", "4", 
-                                                    "5", "6", "7"))
-  
-  # set custom colors (set as many colors as clouds):
-  custom_col <- c("#969cc8", "#e1eedf", "#d7e9d5", "#cde3ca", 
-                  "#c3dec0", "#b9d8b5", "#afd3ab", "#9CC896")
-  
+  tmp_rts$Block <- factor(tmp_rts$Block, levels = c("BL", "1", "2", 
+                                                    "3", "4", "5", "6", "7"))
   # Create raincloud plot:
   plot <-  ggplot(tmp_rts, aes(x = Block, 
                                y = RT, 
@@ -1219,7 +1213,7 @@ for(pos in pos_sign_effect){ # loop positions of found effects
                             alpha = 1, # opacity of the density curve
                             trim = T) + # cut off violins at the ends
            # add scatter points (aka the rain):
-           geom_point(position = position_jitter(width = .15), # jitter, so points don't overlap
+           geom_point(position = position_jitter(width = .15, height = 0), # jitter, so points don't overlap
                       shape = 21, # just dots as shape
                       size = 1) + # set point size here
            # add boxplot:
@@ -1254,13 +1248,116 @@ for(pos in pos_sign_effect){ # loop positions of found effects
            scale_color_manual(values = custom_col) +  
            scale_fill_manual(values = custom_col) +
            # set title  
-           ggtitle(paste("Median reaction times in ", sifi_cond, ", response = ", response, sep = ""))
+           ggtitle(sifi_cond)
 
   # assign name to plot: 
-  assign(paste("plot_", sifi_cond, "_resp_", response, sep = ""), 
+  assign(paste("plot_RTs", sifi_cond, sep = "_"), 
          plot) 
 
   # you can also save the plot, just fill in the missing details: 
   #ggsave("set_path_here", width = w, height = h)
   
 } # END loop positions of found effects
+
+     
+
+
+# For the response rates - plot data from all_responses_resprates:
+
+# save descriptions of all significant post-hoc differences in a vector
+pos_sign_effect <- which(friedman_resp$significance == " * " & 
+                         friedman_resp$test_name != "       Wilcoxon signed-rank test")
+
+# set custom colors (set as many colors as clouds):
+custom_col <- c("#969cc8", "#f7ddb4", "#f5d4a1", "#f3cc8e", 
+                "#f1c37c", "#efbb69", "#edb256", "#ecaa44")
+
+for(pos in pos_sign_effect){ # loop positions of found effects
+
+  # get condition name from comparison description:
+  sifi_cond <- str_sub(friedman_resp[pos, 2], 21, -19)
+  
+  # get response:
+  response <- str_sub(friedman_resp[pos, 2], -1, -1)
+  
+  # get data for sifi_cond & response:
+  tmp_resps <- subset(all_responses_resprates, 
+                    Condition == sifi_cond & 
+                    Response == response)
+
+  # change order of the noise levels: 
+  tmp_resps$Block <- factor(tmp_resps$Block, levels = c("BL", "1", "2", 
+                                                        "3", "4", "5", "6", "7"))
+  
+  # Create raincloud plot:
+  plot <- ggplot(tmp_resps, aes(x = Block, 
+                                y = Response_Rate, 
+                                fill = Block)) +
+          # add violins (aka the cloud):
+          geom_flat_violin(position = position_nudge(x = .25, y = 0), # push violins a little off center
+                           adjust = .7, # smoothing of the density curve
+                           alpha = 1, # opacity of the density curve
+                           trim = T) + # cut off violins at the ends
+          # add scatter points (aka the rain):
+          geom_point(position = position_jitter(width = 0.2, height = 0),# jitter, so points don't overlap completely
+                     shape = 16, # use simple dots as shape
+                     alpha = .4, # opacity
+                     size = 2) + # set point size here
+          # add boxplot:
+          geom_boxplot(aes(x = Block, y = Response_Rate),
+                       position = position_nudge(x = .25, y = 0), # move it up a little
+                       outlier.shape = NA, # don't mark outliers
+                       alpha = 0.3, # set opacity of boxplot fill color
+                       width = .1, # set width of box
+                       colour = "BLACK") +  
+          # add axes titles:
+          ylab("response rate") +
+          xlab("noise level") + 
+          # change padding under the first cloud so the 
+          # points don't touch the axis:
+          scale_x_discrete(expand = c(0.03, .5)) + 
+          # change position of ticks on y-axis so they're 
+          # aligned with the bottom of the density plot  
+          theme(axis.text.y = element_text(hjust = 0.4, vjust = 0.3)) + 
+          # flip the violins so they're horizontal:
+          coord_flip() + 
+          # use cowplot theme:
+          theme_cowplot() +
+          # don't show legend:
+          guides(fill = F, colour = F) +
+          # set colors with color palette:
+          #scale_colour_brewer(palette = "Dark2") + # border color
+          #scale_fill_brewer(palette = "Dark2") + # fill color
+          # set colors manually:
+          scale_color_manual(values = custom_col) +  
+          scale_fill_manual(values = custom_col) +
+          # set title  
+          ggtitle(paste("Response Rates in ", sifi_cond, ", response = ", response, sep = ""))
+          
+  # assign name to plot: 
+  assign(paste("plot_", sifi_cond, "_resp_", response, sep = ""), plot) 
+
+  # you can also save the plot, just fill in the missing details: 
+  #ggsave("set_path_here", width = w, height = h)
+  
+} # END loop positions of found effects  
+
+
+# Put everything into one figure
+
+# Sometimes it takes too long to draw the plots,
+# so if you don't see all plots, run this part again 
+# until it works!
+
+# Plots for the RTs:
+all_plots_RTs <- plot_grid(plot_RTs_A0V1, plot_RTs_A1V1, 
+                           plot_RTs_A1V2, plot_RTs_A2V2, 
+                           labels = c("A", "B", "C", "D"),
+                           ncol = 2, nrow = 2)
+all_plots_RTs
+
+# Plots for the response rates:
+all_plots_responses <- plot_grid(plot_A0V1_resp_1, plot_A1V2_resp_1,
+                                 labels = c("A", "B"),
+                                 ncol = 2, nrow = 1)
+all_plots_responses
