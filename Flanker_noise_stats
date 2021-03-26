@@ -12,7 +12,7 @@
 
 #---- 0. load packages ----
 # Get packages
-packages <- c("rstatix", # for anova_test function 
+packages <- c("rstatix", # for anova_test function
               "reshape2", # for reshaping dfs
               "doBy", # for summarizing data
               "stringr", # for getting substrings
@@ -34,42 +34,43 @@ require("rstatix")
 require("reshape2")
 require("doBy")
 require("stringr")
-require("ggplot2") 
+require("ggplot2")
 require("tidyr")
 require("nortest")
-require("dplyr")  
+require("dplyr")
 require("plyr")
 require("bitops")
-require("cowplot") 
+require("cowplot")
 require("lavaan")
-require("readr") 
+require("readr")
 require("smooth")
-require("rmarkdown") 
-require("Hmisc") 
+require("rmarkdown")
+require("Hmisc")
 require("caTools")
 
 
 #---- 1. Get data ----
 # 1.1 Set working directory & load preprocessed data
 setwd("/Users/merle/Desktop/Arbeit/HiWi/Experimente/Madeleine Dering")
+#setwd("/Users/juliankeil/Documents/Arbeit/Kiel/Abschlussarbeiten/Fertig/Dering/Daten_Madelaine/")
 load('alldata.Rda')
 
 # 1.2 Get sample
 # only include people without ADHS or reduced attention
-data <- subset(cleandata, adhs == 0 & attention == 0) 
+data <- subset(cleandata, adhs == 0 & attention == 0)
 
 # How many participants are left?
 length(unique(data$id)) # should be 12
 
 # 1.3 get the 4 groups
 # @ Julian I interpreted 0 as False and 1 as True here
-incong_no_noise <- subset(data, congruence == 0 & noise == 0) 
-cong_no_noise <- subset(data, congruence == 1 & noise == 0) 
+incong_no_noise <- subset(data, congruence == 0 & noise == 0)
+cong_no_noise <- subset(data, congruence == 1 & noise == 0)
 incong_noise <- subset(data, congruence == 0 & noise == 1)
 cong_noise <- subset(data, congruence == 1 & noise == 1)
 
 # compute error rates & median RTs
-# I assume responses are in cResp (for correct answer?) 
+# I assume responses are in cResp (for correct answer?)
 # and 1 means correct and 0 means incorrect answer
 
 participants <- unique(data$id) # get IDs
@@ -79,32 +80,32 @@ summ_data <- data.frame()
 for (participant in participants){ # loop participants
     # How many correct answers were there compared to the overall number of trials?
     # divide number of correct responses by number of all responses
-    error_rate <- c(round(length(subset(incong_no_noise, cResp == 1 & id == participant)$cResp) / 
-                          length(subset(incong_no_noise, id == participant)$cResp), 
+    error_rate <- c(round(length(subset(incong_no_noise, cResp == 1 & id == participant)$cResp) /
+                          length(subset(incong_no_noise, id == participant)$cResp),
                           digits = 3),
-                    round(length(subset(cong_no_noise, cResp == 1 & id == participant)$cResp) / 
-                          length(subset(cong_no_noise, id == participant)$cResp), 
+                    round(length(subset(cong_no_noise, cResp == 1 & id == participant)$cResp) /
+                          length(subset(cong_no_noise, id == participant)$cResp),
                           digits = 3),
-                    round(length(subset(incong_noise, cResp == 1 & id == participant)$cResp) / 
+                    round(length(subset(incong_noise, cResp == 1 & id == participant)$cResp) /
                           length(subset(incong_noise, id == participant)$cResp),
                           digits = 3),
-                    round(length(subset(cong_noise, cResp == 1 & id == participant)$cResp) / 
-                          length(subset(cong_noise, id == participant)$cResp), 
+                    round(length(subset(cong_noise, cResp == 1 & id == participant)$cResp) /
+                          length(subset(cong_noise, id == participant)$cResp),
                           digits = 3))
-    
+
     median_RT <- c(round(median(subset(incong_no_noise, id == participant)$RT), digits = 3),
                    round(median(subset(cong_no_noise, id == participant)$RT), digits = 3),
                    round(median(subset(incong_noise, id == participant)$RT), digits = 3),
                    round(median(subset(cong_noise, id == participant)$RT), digits = 3))
-    
+
     # get conditions & id
     congruency <- c("incongruent", "congruent", "incongruent", "congruent")
     noise <- c("no_noise", "no_noise", "noise", "noise")
     id <- c(rep(participant, times = 4))
-    
+
     # combine data to get df:
     summ_data <- as.data.frame(rbind( summ_data, cbind(id, congruency, noise, error_rate, median_RT)))
-    
+
 } # END loop participants
 
 # clean up:
@@ -131,9 +132,9 @@ groups <- list(summ_incong_no_noise,
                summ_cong_noise)
 
 # get condition names:
-names <- c("incongruent task, no noise", 
-           "congruent task, no noise", 
-           "incongruent task with noise", 
+names <- c("incongruent task, no noise",
+           "congruent task, no noise",
+           "incongruent task with noise",
            "congruent task with noise")
 
 
@@ -142,45 +143,45 @@ lillie_results <- data.frame()
 
 # 2.2 run Lilliefors tests
 for (idx in 1:4){ # loop condition names
-  
+
   group <- groups[[idx]]
-  
+
   # First for the error rates:
-  
+
   # run lilliefors test on dependent variable
   lillie <- lillie.test(as.numeric(group$error_rate))
   # save results:
   D <- round(lillie$statistic, digits = 3)
   p <- round(lillie$p.value, digits = 3)
-  group_name <- names[idx] 
-  
-  significance <- " " 
+  group_name <- names[idx]
+
+  significance <- " "
   if (p <= 0.05){
-    significance <- " * " 
+    significance <- " * "
   }
-  
+
   variable <- "error rates"
-  
+
   # combine and add to results df:
   lillie_results <- as.data.frame(rbind(lillie_results, cbind(variable, group_name, D, p, significance)))
-  
-  
+
+
   # Again for the RTs:
-  
+
   # run lilliefors test on dependent variable
   lillie <- lillie.test(as.numeric(group$median_RT))
   # save results:
   D <- round(lillie$statistic, digits = 3)
   p <- round(lillie$p.value, digits = 3)
-  group <- names[idx] 
-  
-  significance <- " " 
+  group <- names[idx]
+
+  significance <- " "
   if (p <= 0.05){
-    significance <- " * " 
+    significance <- " * "
   }
-  
+
   variable <- "median RTs"
-  
+
   # combine and add to results df:
   lillie_results <- as.data.frame(rbind(lillie_results, cbind(variable, group_name, D, p, significance)))
 
@@ -191,13 +192,18 @@ rm(D, p, variable, significance, lillie, idx)
 
 # Have a look at the results:
 # View(lillie_results)
-# use rank transformations before the ANOVA and nonparametrical 
+# use rank transformations before the ANOVA and nonparametrical
 # post-hoc tests for the error rates & parametrical tests for the RTs
 
 
 #---- 3. ANOVAs + post-hoc tests ----
 
 # 3.1 ANOVAs
+summ_data$id <- as.factor(summ_data$id)
+summ_data$congruency <- as.factor(summ_data$congruency)
+summ_data$noise <- as.factor(summ_data$noise)
+summ_data$error_rate <- as.numeric(summ_data$error_rate)
+summ_data$median_RT <- as.numeric(summ_data$median_RT)
 
 # rank transform error rates:
 summ_data$error_rates_rank <- rank(summ_data[4])
@@ -205,20 +211,20 @@ summ_data$error_rates_rank <- rank(summ_data[4])
 # RTs don't have to be rank transformed
 
 # run ANOVAs
-ANOVA_RTS <- anova_test(data = summ_data, 
-                        formula = as.numeric(median_RT) ~ congruency * noise 
+ANOVA_RTS <- anova_test(data = summ_data,
+                        formula = as.numeric(median_RT) ~ congruency * noise
                                   + Error(id / (congruency * noise)))
 
-ANOVA_error_rates <- anova_test(data = summ_data, 
-                                formula = as.numeric(error_rates_rank) ~ congruency * noise 
+ANOVA_error_rates <- anova_test(data = summ_data,
+                                formula = as.numeric(error_rates_rank) ~ congruency * noise
                                 + Error(id / (congruency * noise)))
 
 # Sphericity is given apparently, so no need to apply a correction here.
 
 
 # 3.2 Post-hoc tests:
-# There is a main effect for congruency for both RTs and error 
-# rates, so test those using t-tests (for RTs) / Wilcoxon 
+# There is a main effect for congruency for both RTs and error
+# rates, so test those using t-tests (for RTs) / Wilcoxon
 # signed rank tests (for error rates)
 
 
@@ -229,16 +235,16 @@ gr2_noise <- c("no_noise", "noise", "no_noise", "no_noise")
 post_hoc_res <- data.frame()
 
 for (idx in 1:4){ # loop post hoc tests
-  
- # for the RTs:  
+
+ # for the RTs:
  ttest_res <-  t.test(x = as.numeric(subset(summ_data, congruency == gr1_con[idx] & noise == gr1_noise[idx])$median_RT),
-               y = as.numeric(subset(summ_data, congruency == gr2_con[idx] & noise == gr2_noise[idx])$median_RT),        
+               y = as.numeric(subset(summ_data, congruency == gr2_con[idx] & noise == gr2_noise[idx])$median_RT),
                alternative = "two.sided", paired = T)
   # get p, T and df:
  T_val <- round(ttest_res$statistic, digits = 3)
  df <- ttest_res$parameter
  p <- round(ttest_res$p.value, digits = 3)*4 # *4 for Bonferroni correction
- 
+
  # add asterix if result is significant:
  significance <- " "
  if (p <= 0.05){
@@ -246,36 +252,36 @@ for (idx in 1:4){ # loop post hoc tests
  }
  # add description of conducted test:
  test_name <- "       t-test"
- comparison <- paste("RTs in", gr1_con[idx], gr1_noise[idx], "vs.", gr2_con[idx], gr2_noise[idx], sep = " ") 
- 
+ comparison <- paste("RTs in", gr1_con[idx], gr1_noise[idx], "vs.", gr2_con[idx], gr2_noise[idx], sep = " ")
+
  # placeholders for Wilcoxon  & ANOVA test statistics:
  W = " "
- F_val <- " " 
- 
+ F_val <- " "
+
  # combine and add to results df:
  post_hoc_res <- as.data.frame(rbind(post_hoc_res, cbind(test_name, comparison, F_val, T_val, W, df, p, significance)))
- 
- 
+
+
  # Same for the error rates:
- # for the RTs:  
+ # for the RTs:
  wilc_res <-  wilcox.test(x = as.numeric(subset(summ_data, congruency == gr1_con[idx] & noise == gr1_noise[idx])$error_rate),
-                           y = as.numeric(subset(summ_data, congruency == gr2_con[idx] & noise == gr2_noise[idx])$error_rate),        
+                           y = as.numeric(subset(summ_data, congruency == gr2_con[idx] & noise == gr2_noise[idx])$error_rate),
                            alternative = "two.sided", paired = T, exact = F)
- 
+
  # get p, T and df:
  W <- round(wilc_res$statistic, digits = 3)
  p <- round(wilc_res$p.value, digits = 3)*4 # *4 for Bonferroni correction
- 
+
  # add asterix if result is significant:
  significance <- " "
  if (p <= 0.05){
    significance <- " * "
  }
- 
+
  # add description of conducted test:
  test_name <- "       Wilcoxon signed-rank test"
- comparison <- paste("Error rates in", gr1_con[idx], gr1_noise[idx], "vs.", gr2_con[idx], gr2_noise[idx], sep = " ") 
- 
+ comparison <- paste("Error rates in", gr1_con[idx], gr1_noise[idx], "vs.", gr2_con[idx], gr2_noise[idx], sep = " ")
+
  # placeholder for t-test statistic & df:
  T_val = " "
  df <- " "
@@ -283,8 +289,8 @@ for (idx in 1:4){ # loop post hoc tests
 
  # combine and add to results df:
  post_hoc_res <- as.data.frame(rbind(post_hoc_res, cbind(test_name, comparison,  F_val, T_val, W, df, p, significance)))
- 
-  
+
+
 } # END loop post hoc tests
 
 # order df so it's more neat:
@@ -320,19 +326,46 @@ if (p <= 0.05){
 
 row_err_ANOVA <- cbind(test_name, comparison, F_val, T_val, W, df, p, significance)
 
-
 # put everything together
 ANOVA_res <- rbind(row_RT_ANOVA, post_hoc_res[1:4,], row_err_ANOVA, post_hoc_res[5:8,])
 
 # clean up
-rm(row_RT_ANOVA, row_err_ANOVA, post_hoc_res, 
-   significance, F_val, T_val, df, W, p, 
+rm(row_RT_ANOVA, row_err_ANOVA, post_hoc_res,
+   significance, F_val, T_val, df, W, p,
    test_name, comparison, wilc_res, ttest_res)
 
 # Have a look at the results:
 #View(ANOVA_res)
 
+# 3.3. Congruency Effect: How much does the performance change from congruent to incongruent?
 
+# 3.3.1. Error Rates:
+# Compute Congruency Effect: Cong - Incong
+cong_noise_ER <- summ_data$error_rate[summ_data$congruency == 'congruent' & summ_data$noise == 'noise'] - 
+                 summ_data$error_rate[summ_data$congruency == 'incongruent' & summ_data$noise == 'noise']
+cong_nonoise_ER <- summ_data$error_rate[summ_data$congruency == 'congruent' & summ_data$noise == 'no_noise'] - 
+                   summ_data$error_rate[summ_data$congruency == 'incongruent' & summ_data$noise == 'no_noise']
+
+# Check distribution
+lil_cong_ER <- lillie.test(cong_noise_ER)
+lil_incong_ER <- lillie.test(cong_nonoise_ER)
+
+# Lillie-Test significant -> Wilcox
+wilcox.test(cong_noise_ER, cong_nonoise_ER, alternative = "two.sided", paired = T, exact = F)
+
+# 3.3.2. Reaction Times:
+# Compute Congruency Effect: Cong - Incong
+cong_noise_RT <- summ_data$median_RT[summ_data$congruency == 'congruent' & summ_data$noise == 'noise'] - 
+                 summ_data$error_rate[summ_data$congruency == 'incongruent' & summ_data$noise == 'noise']
+cong_nonoise_RT <- summ_data$median_RT[summ_data$congruency == 'congruent' & summ_data$noise == 'no_noise'] - 
+                   summ_data$error_rate[summ_data$congruency == 'incongruent' & summ_data$noise == 'no_noise']
+
+# Check distribution
+lil_cong_RT <- lillie.test(cong_noise_RT)
+lil_incong_RT <- lillie.test(cong_nonoise_RT)
+
+# Lillie-Test not significant -> t-test
+t.test(cong_noise_RT,cong_nonoise_RT,alternative = "two.sided", paired = T, exact = F)
 
 #---- 4. Plots ----
 
@@ -342,27 +375,27 @@ summ_data$median_RT <- as.numeric(summ_data$median_RT)
 summ_data$error_rate <- as.numeric(summ_data$error_rate)
 
 # summarize data
-summary_median_RTs <- summaryBy(median_RT ~ noise + congruency, 
+summary_median_RTs <- summaryBy(median_RT ~ noise + congruency,
                                 data = summ_data,
-                                FUN = function(x) { 
-                                  c(M = round(mean(x, na.rm = T), digits = 3), 
-                                    SD = round(sd(x, na.rm = T), digits = 3), 
-                                    N = length(x)) 
+                                FUN = function(x) {
+                                  c(M = round(mean(x, na.rm = T), digits = 3),
+                                    SD = round(sd(x, na.rm = T), digits = 3),
+                                    N = length(x))
                                   })
 
-summary_error_rates <- summaryBy(error_rate ~ noise + congruency, 
+summary_error_rates <- summaryBy(error_rate ~ noise + congruency,
                                  data = summ_data,
-                                 FUN = function(x) { 
-                                   c(M = round(mean(x, na.rm = T), digits = 3), 
-                                     SD = round(sd(x, na.rm = T), digits = 3), 
-                                     N = length(x)) 
+                                 FUN = function(x) {
+                                   c(M = round(mean(x, na.rm = T), digits = 3),
+                                     SD = round(sd(x, na.rm = T), digits = 3),
+                                     N = length(x))
                                  })
 
 
 
 #---- 4.2 Create Raincloud Plots ----
 
-# 4.2.1 Plot settings ---- 
+# 4.2.1 Plot settings ----
 # Set up flat violin function in ggplot ----
 # This part is from Tom Rhys Marshall's Github page:
 # https://github.com/RainCloudPlots/RainCloudPlots/blob/master/tutorial_R/R_rainclouds.R
@@ -395,7 +428,7 @@ GeomFlatViolin <-
           setup_data = function(data, params) {
             data$width <- data$width %||%
               params$width %||% (resolution(data$x, FALSE) * 0.9)
-            
+
             # ymin, ymax, xmin, and xmax define the bounding rectangle for each group
             data %>%
               group_by(group) %>%
@@ -406,34 +439,34 @@ GeomFlatViolin <-
                 xmax = x + width / 2
               )
           },
-          
+
           draw_group = function(data, panel_scales, coord) {
             # Find the points for the line to go all the way around
             data <- transform(data,
                               xminv = x,
                               xmaxv = x + violinwidth * (xmax - x)
             )
-            
+
             # Make sure it's sorted properly to draw the outline
             newdata <- rbind(
               plyr::arrange(transform(data, x = xminv), y),
               plyr::arrange(transform(data, x = xmaxv), -y)
             )
-            
+
             # Close the polygon: set first and last point the same
             # Needed for coord_polar and such
             newdata <- rbind(newdata, newdata[1, ])
-            
+
             ggplot2:::ggname("geom_flat_violin", GeomPolygon$draw_panel(newdata, panel_scales, coord))
           },
-          
+
           draw_key = draw_key_polygon,
-          
+
           default_aes = aes(
             weight = 1, colour = "grey20", fill = "white", size = 0.5,
             alpha = NA, linetype = "solid"
           ),
-          
+
           required_aes = c("x", "y")
   )
 
@@ -450,18 +483,18 @@ summ_data$condition <- with(summ_data, paste0(congruency, " task, ", noise))
 # For the median RTs - plot data from summ_data:
 
 # set custom colors (set as many colors as clouds):
-custom_col <- c("#969cc8","#969cc8", "#d96c6c", "#d96c6c") 
+custom_col <- c("#969cc8","#969cc8", "#d96c6c", "#d96c6c")
 
 # add a formatting style for the axis labels (I need line breaks)
 addline_format <- function(x){
   # add linebreak instead of / in the labels
-  gsub('/','\n',x) 
+  gsub('/','\n',x)
 }
 
 
-# Create raincloud plot:
-plot_RTs <- ggplot(summ_data, aes(x = condition, 
-                                  y = median_RT, 
+# Create raincloud plot for the RTs:
+plot_RTs <- ggplot(summ_data, aes(x = condition,
+                                  y = median_RT,
                                   fill = condition)) +
             # add violins (aka the cloud):
             geom_flat_violin(position = position_nudge(x = .15, y = 0), # push violins a little off center
@@ -478,41 +511,41 @@ plot_RTs <- ggplot(summ_data, aes(x = condition,
                          outlier.shape = NA, # don't mark outliers
                          alpha = 0.3, # set opacity of boxplot fill color
                          width = .1, # set width of box
-                         colour = "BLACK") +  
+                         colour = "BLACK") +
             # add axes titles:
             ylab("reaction time in ms") +
-            xlab("condition") + 
-            # change scaling & ticks of y-axis (actually the x-axis 
+            xlab("condition") +
+            # change scaling & ticks of y-axis (actually the x-axis
             # because we turn the plot around):
-            scale_y_continuous(breaks = seq(from = 0, 
-                                            to = 450, 
+            scale_y_continuous(breaks = seq(from = 0,
+                                            to = 450,
                                             by = 50),
                               limits = c(0, 470)) +
-            # change padding under the first cloud so the 
+            # change padding under the first cloud so the
             # points don't touch the axis:
-            scale_x_discrete(expand = c(0.03, .5), 
+            scale_x_discrete(expand = c(0.03, .5),
                              # add labels, use / where you need a line break:
-                             labels=addline_format(c("congruent task,/ no noise", 
-                                                     "congruent task,/ noise", 
-                                                     "incongruent task,/ no noise", 
+                             labels=addline_format(c("congruent task,/ no noise",
+                                                     "congruent task,/ noise",
+                                                     "incongruent task,/ no noise",
                                                      "incongruent task,/ noise"))) +
-    
+
             # flip the violins so they're horizontal:
-            coord_flip() + 
+            coord_flip() +
             # use cowplot theme:
             theme_cowplot() +
-            # don't use different point styles
+            # don't use legend
             guides(fill = FALSE, colour = FALSE) +
             # set colors with color palette:
             #scale_colour_brewer(palette = "Dark2") + # border color
             #scale_fill_brewer(palette = "Dark2") + # fill color
             # set colors manually:
-            scale_color_manual(values = custom_col) +  
+            scale_color_manual(values = custom_col) +
             scale_fill_manual(values = custom_col) +
-            # set title  
+            # set title
             ggtitle("Median reaction times")
-  
-# you can also save the plot, just fill in the missing details: 
+
+# you can also save the plot, just fill in the missing details:
 #ggsave("set_path_here", width = w, height = h)
 
 # Look at the plot:
@@ -522,10 +555,10 @@ plot_RTs <- ggplot(summ_data, aes(x = condition,
 # Same for the error rates:
 
 # set custom colors (set as many colors as clouds):
-custom_col <- c("#969cc8","#969cc8", "#d96c6c", "#d96c6c") 
+custom_col <- c("#969cc8","#969cc8", "#d96c6c", "#d96c6c")
 
-plot_error_rates <- ggplot(summ_data, aes(x = condition, 
-                                          y = error_rate, 
+plot_error_rates <- ggplot(summ_data, aes(x = condition,
+                                          y = error_rate,
                                           fill = condition)) +
                     # add violins (aka the cloud):
                     geom_flat_violin(position = position_nudge(x = .15, y = 0), # push violins a little off center
@@ -542,42 +575,173 @@ plot_error_rates <- ggplot(summ_data, aes(x = condition,
                                  outlier.shape = NA, # don't mark outliers
                                  alpha = 0.3, # set opacity of boxplot fill color
                                  width = .1, # set width of box
-                                 colour = "BLACK") +  
+                                 colour = "BLACK") +
                     # add axes titles:
                     ylab("rate of correct answers") +
-                    xlab("condition") + 
-                    # change scaling & ticks of y-axis (actually the x-axis 
+                    xlab("condition") +
+                    # change scaling & ticks of y-axis (actually the x-axis
                     # because we turn the plot around):
-                    scale_y_continuous(breaks = seq(from = 0, 
-                                                    to = 1, 
+                    scale_y_continuous(breaks = seq(from = 0,
+                                                    to = 1,
                                                     by = .1),
                                        limits = c(0, 1.1)) +
-                    # change padding under the first cloud so the 
+                    # change padding under the first cloud so the
                     # points don't touch the axis:
-                    scale_x_discrete(expand = c(0.02, .1), 
+                    scale_x_discrete(expand = c(0.02, .1),
                     # add labels, use / where you need a line break:
-                    labels=addline_format(c("congruent task,/ no noise", 
-                                            "congruent task,/ noise", 
-                                            "incongruent task,/ no noise", 
+                    labels=addline_format(c("congruent task,/ no noise",
+                                            "congruent task,/ noise",
+                                            "incongruent task,/ no noise",
                                             "incongruent task,/ noise"))) +
                     # flip the violins so they're horizontal:
-                    coord_flip() + 
+                    coord_flip() +
                     # use cowplot theme:
                     theme_cowplot() +
-                    # don't use different point styles
+                    # don't use legend
                     guides(fill = FALSE, colour = FALSE) +
                     # set colors with color palette:
                     #scale_colour_brewer(palette = "Dark2") + # border color
                     #scale_fill_brewer(palette = "Dark2") + # fill color
                     # set colors manually:
-                    scale_color_manual(values = custom_col) +  
+                    scale_color_manual(values = custom_col) +
                     scale_fill_manual(values = custom_col) +
-                    # set title  
+                    # set title
                     ggtitle("Performance in the Flanker task")
 
-# you can also save the plot, just fill in the missing details: 
+# you can also save the plot, just fill in the missing details:
 #ggsave("set_path_here", width = w, height = h)
 
 # Look at the plot:
 #plot_error_rates
 
+
+
+# For the congruency effects - plot error rates from cong_noise_ER & cong_nonoise_ER
+
+# prepare data for plotting:
+noise <- c(rep("no noise", times = length(cong_nonoise_ER)), 
+           rep("noise", times = length(cong_nonoise_ER)))
+error_rate <-  c(cong_nonoise_ER, cong_noise_ER)
+cong_err_df <- as.data.frame(cbind(error_rate, noise))
+cong_err_df$error_rate <- as.numeric(cong_err_df$error_rate)
+
+# set custom colors (set as many colors as clouds):
+custom_col <- c("#969cc8","#d96c6c")
+
+plot_cong_ER <- ggplot(cong_err_df, aes(x = noise,
+                                        y = error_rate,
+                                        fill = noise)) +
+                # add violins (aka the cloud):
+                geom_flat_violin(position = position_nudge(x = .15, y = 0), # push violins a little off center
+                                 adjust = .8, # smoothing of the density curve
+                                 alpha = .5, # opacity of the density curve
+                                 trim = T) + # cut off violins at the ends
+                # add scatter points (aka the rain):
+                geom_point(position = position_jitter(width = .1, height = 0), # jitter, so points don't overlap
+                           shape = 21, # just dots as shape
+                           size = 1) + # set point size here
+                # add boxplot:
+                geom_boxplot(aes(x = noise, y = error_rate),
+                             position = position_nudge(x = .15, y = 0), # move it up a little
+                             outlier.shape = NA, # don't mark outliers
+                             alpha = 0.3, # set opacity of boxplot fill color
+                             width = .1, # set width of box
+                             colour = "BLACK") +
+                # add axes titles:
+                ylab("rate of correct answers") +
+                xlab("condition") +
+                # change scaling & ticks of y-axis (actually the x-axis
+                # because we turn the plot around):
+                scale_y_continuous(breaks = seq(from = 0,
+                                                to = 1,
+                                                by = 0.2),
+                                   limits = c(0, 1.1)) +
+                # change padding under the first cloud so the
+                # points don't touch the axis:
+                scale_x_discrete(expand = c(0.02, .2)) +
+                # flip the violins so they're horizontal:
+                coord_flip() +
+                # use cowplot theme:
+                theme_cowplot() +
+                # don't use legend
+                guides(fill = FALSE, colour = FALSE) +
+                # set colors with color palette:
+                #scale_colour_brewer(palette = "Dark2") + # border color
+                #scale_fill_brewer(palette = "Dark2") + # fill color
+                # set colors manually:
+                scale_color_manual(values = custom_col) +
+                scale_fill_manual(values = custom_col) +
+                # set title
+                ggtitle("Congruency Effect - Performance")
+
+# you can also save the plot, just fill in the missing details:
+#ggsave("set_path_here", width = w, height = h)
+
+# Look at the plot:
+#plot_cong_ER
+
+
+
+# For the congruency effects - plot RTs from cong_noise_RT & cong_nonoise_RT
+
+# prepare data for plotting:
+noise <- c(rep("no noise", times = length(cong_nonoise_RT)), 
+           rep("noise", times = length(cong_nonoise_RT)))
+RT <-  c(cong_nonoise_RT, cong_noise_RT)
+cong_RT_df <- as.data.frame(cbind(RT, noise))
+cong_RT_df$RT <- as.numeric(cong_RT_df$RT)
+
+# set custom colors (set as many colors as clouds):
+custom_col <- c("#969cc8","#d96c6c")
+
+plot_cong_RT <- ggplot(cong_RT_df, aes(x = noise,
+                                       y = RT,
+                                       fill = noise)) +
+                # add violins (aka the cloud):
+                geom_flat_violin(position = position_nudge(x = .15, y = 0), # push violins a little off center
+                adjust = .8, # smoothing of the density curve
+                alpha = .5, # opacity of the density curve
+                trim = T) + # cut off violins at the ends
+                # add scatter points (aka the rain):
+                geom_point(position = position_jitter(width = .1, height = 0), # jitter, so points don't overlap
+                shape = 21, # just dots as shape
+                size = 1) + # set point size here
+                # add boxplot:
+                geom_boxplot(aes(x = noise, y = RT),
+                             position = position_nudge(x = .15, y = 0), # move it up a little
+                             outlier.shape = NA, # don't mark outliers
+                             alpha = 0.3, # set opacity of boxplot fill color
+                             width = .1, # set width of box
+                             colour = "BLACK") +
+                # add axes titles:
+                ylab("Reaction time in ms") +
+                xlab("condition") +
+                # change scaling & ticks of y-axis (actually the x-axis
+                # because we turn the plot around):
+                scale_y_continuous(breaks = seq(from = 0,
+                                   to = 350,
+                                   by = 50),
+                                   limits = c(0, 360)) +
+                # change padding under the first cloud so the
+                # points don't touch the axis:
+                scale_x_discrete(expand = c(0.2, .2)) +
+                # flip the violins so they're horizontal:
+                coord_flip() +
+                # use cowplot theme:
+                theme_cowplot() +
+                # don't use legend
+                guides(fill = FALSE, colour = FALSE) +
+                # set colors with color palette:
+                #scale_colour_brewer(palette = "Dark2") + # border color
+                #scale_fill_brewer(palette = "Dark2") + # fill color
+                # set colors manually:
+                scale_color_manual(values = custom_col) +
+                scale_fill_manual(values = custom_col) +
+                # set title
+                ggtitle("Congruency Effect - Performance")
+
+# you can also save the plot, just fill in the missing details:
+#ggsave("set_path_here", width = w, height = h)
+
+# Look at the plot:
+#plot_cong_RT
