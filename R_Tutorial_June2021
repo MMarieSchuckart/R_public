@@ -308,7 +308,8 @@ my_plot <- ggplot(agg_data, aes(x = condition,
 my_plot
 
 # This is just an example, you can build more 
-# or less everything you want in ggplot2. There are also a lot of cool 
-# examples for plots on the internet, most of them with code you can copy.
+# or less anything you want in ggplot2. There are also a lot of cool 
+# examples for plots on the internet, most of them with code you can copy 
+# (check out pirateplots from the yarrr package!)
 
 
