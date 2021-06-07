@@ -96,7 +96,7 @@ for (i in 1:length(file_list)) { # for the number of files in our directory...
   # get position of column with reaction times (durations) and condition names
   col_cond <- which(names(subj_df) == "condition")
   col_RTs <- which(names(subj_df) == "duration")
-  RT_data <- subset(subj_df, condition != "")[c(col_cond, col_RTs)] # get only a part of subj_df
+  RT_data <- subset(subj_df, sender == "reaction")[c(col_cond, col_RTs)] # get only a part of subj_df
   # RT_data is now a matrix with 2 columns, but we have to covert it to a dataframe
   RT_data <- as.data.frame(RT_data)
   
