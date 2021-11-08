@@ -1,6 +1,6 @@
 # R_public
 
-This is just a conglomerate of old R-scripts.
+This is just a conglomerate of old R-scripts I still return to sometimes to look stuff up.
 
 In [this one](https://github.com/MMarieSchuckart/R_public/blob/main/Flanker_noise_stats), I'm analyzing data from a flanker task experiment from Madeleine Dering's Diploma study. I wrote this for a publication, so there's a pretty nice raincloud plot in there if you scroll to the end.
 
